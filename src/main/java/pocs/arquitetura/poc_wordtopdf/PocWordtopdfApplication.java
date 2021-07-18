@@ -4,7 +4,6 @@ import fr.opensagres.poi.xwpf.converter.pdf.PdfConverter;
 import fr.opensagres.poi.xwpf.converter.pdf.PdfOptions;
 import lombok.SneakyThrows;
 import org.apache.poi.xwpf.usermodel.*;
-import org.docx4j.Docx4J;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.WordprocessingML.MainDocumentPart;
 import org.docx4j.wml.Text;
@@ -15,13 +14,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 import javax.xml.bind.JAXBElement;
+
 import java.io.*;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
@@ -38,26 +34,27 @@ public class PocWordtopdfApplication {
 
 	Logger logger = LoggerFactory.getLogger(PocWordtopdfApplication.class);
 
+	public static File docxContratoTemplateFile = new File(
+			PocWordtopdfApplication.class.getResource("/contrato-template.docx").getPath()
+	);
 
 	@SneakyThrows
-	@GetMapping("/teste2")
-	public Resposta teste2() {
+	@GetMapping("/pdf")
+	public Resposta pdf() {
 
 		String docxOutputPath = "/home/zanfranceschi/projects/itau/poc_wordtopdf/output/contrato2.docx";
 		String pdfOutputPath = "/home/zanfranceschi/projects/itau/poc_wordtopdf/output/contrato2.pdf";
 
-		String docxTemplatePath = getClass().getResource("/contrato-template.docx").getPath();
-		File doc = new File(docxTemplatePath);
-
-		WordprocessingMLPackage wordMLPackage = WordprocessingMLPackage.load(doc);
+		// Com WordprocessingMLPackage é possível busar nodes com XPath, com XWPFDocument não.
+		WordprocessingMLPackage wordMLPackage = WordprocessingMLPackage.load(docxContratoTemplateFile);
 
 		MainDocumentPart mainDocumentPart = wordMLPackage.getMainDocumentPart();
 
-		String textNodesXPath = "//w:t";
-		List<Object> textNodes= mainDocumentPart.getJAXBNodesViaXPath(textNodesXPath, true);
-
+		String textNodesXPath = "//w:t"; // <w:t/> é o nó folha do documento XML que contém texto.
+		List<Object> textNodes = mainDocumentPart.getJAXBNodesViaXPath(textNodesXPath, true);
 		for (Object obj : textNodes) {
 			Text text = (Text) ((JAXBElement) obj).getValue();
+			// substituição dos placeholders (qq string arbitrária)
 			text.setValue(text.getValue().replace("${NOME}", "CHICO"));
 			text.setValue(text.getValue().replace("${DATA}", "20-20-10"));
 			text.setValue(text.getValue().replace("${DOCUMENTO}", "123.123.1231-22"));
@@ -66,27 +63,34 @@ public class PocWordtopdfApplication {
 		try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
 			wordMLPackage.save(out);
 
-			ByteArrayInputStream in = new ByteArrayInputStream(out.toByteArray());
-			XWPFDocument document = new XWPFDocument(in);
+			// transforma em objeto XWPFDocument para converter para PDF
+			try(ByteArrayInputStream in = new ByteArrayInputStream(out.toByteArray())) {
 
+				try (XWPFDocument document = new XWPFDocument(in)) {
+					// Desculpa, me perdi nos aninhamntos com os "tries"
+					// com .NET dá pra deixar mais limpo ;)
 
-			/*
-			// debug
-			wordMLPackage.save(new File(docxOutputPath)); // salva o docx em disco
-			try (FileOutputStream pdfOutputStream = new FileOutputStream(pdfOutputPath)) { // salva o pdf em disco
-				PdfOptions options = PdfOptions.create();
-				PdfConverter.getInstance().convert(document, pdfOutputStream, options);
-			}
-			*/
+					boolean debug = true;
+					if (debug) { // salvar em disco para verificar o resultado
 
-			try (ByteArrayOutputStream pdfOutputStream = new ByteArrayOutputStream()) {
+						wordMLPackage.save(new File(docxOutputPath)); // salva o docx em disco
 
-				PdfOptions options = PdfOptions.create();
-				PdfConverter.getInstance().convert(document, pdfOutputStream, options);
+						try (FileOutputStream pdfOutputStream = new FileOutputStream(pdfOutputPath)) { // salva o pdf em disco
+							PdfOptions options = PdfOptions.create();
+							PdfConverter.getInstance().convert(document, pdfOutputStream, options);
+						}
+					}
 
-				byte[] pdfBytes = Base64.getEncoder().encode(pdfOutputStream.toByteArray());
-				String pdfBase64 = new String(pdfBytes);
-				return new Resposta(pdfBase64, "teste");
+					try (ByteArrayOutputStream pdfOutputStream = new ByteArrayOutputStream()) {
+
+						PdfOptions options = PdfOptions.create();
+						PdfConverter.getInstance().convert(document, pdfOutputStream, options);
+
+						byte[] pdfBytes = Base64.getEncoder().encode(pdfOutputStream.toByteArray());
+						String pdfBase64 = new String(pdfBytes);
+						return new Resposta(pdfBase64, "teste");
+					}
+				}
 			}
 		}
 	}
@@ -94,42 +98,14 @@ public class PocWordtopdfApplication {
 	@SneakyThrows
 	@GetMapping("/teste")
 	public Resposta teste() {
-
+		// não use esse método... o método "pdf" tá melhor... mais inteligível e funciona com tabelas...
 
 		String docxTemplatePath = getClass().getResource("/contrato-template.docx").getPath();
-
-
-
-		try (FileSystem fs = FileSystems.newFileSystem(Path.of(docxTemplatePath), null)) {
-			Path word = fs.getPath("/word/document.xml");
-			String content = Files.readString(word);
-			logger.info(content);
-		}
-
-
 
 		String docxOutputPath = "/home/zanfranceschi/projects/itau/poc_wordtopdf/output/contrato.docx";
 		String pdfOutputPath = "/home/zanfranceschi/projects/itau/poc_wordtopdf/output/contrato.pdf";
 
 		try (XWPFDocument doc = getXWPFDocument()) {
-
-
-			for (IBodyElement be : doc.getBodyElements()) {
-				 for (XWPFTable table : be.getBody().getTables()) {
-					 for (XWPFTableRow row : table.getRows()) {
-					 	 for (XWPFTableCell cell :row.getTableCells()) {
-							String texto = cell.getText();
-							if (texto != null) {
-								cell.setText(texto.replace("${NOME}", "XPTO"));
-								cell.setText(texto.replace("${DATA}", "!!!!"));
-								cell.setText(texto.replace("${DOCUMENTO}", "294555"));
-							}
-						 }
-					 }
-				 }
-			}
-
-
 
 			List<XWPFParagraph> xwpfParagraphList = doc.getParagraphs();
 			for (XWPFParagraph xwpfParagraph : xwpfParagraphList) {
