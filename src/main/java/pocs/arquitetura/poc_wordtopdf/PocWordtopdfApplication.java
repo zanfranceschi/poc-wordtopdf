@@ -42,9 +42,6 @@ public class PocWordtopdfApplication {
 	@GetMapping("/pdf")
 	public Resposta pdf() {
 
-		String docxOutputPath = "/home/zanfranceschi/projects/itau/poc_wordtopdf/output/contrato2.docx";
-		String pdfOutputPath = "/home/zanfranceschi/projects/itau/poc_wordtopdf/output/contrato2.pdf";
-
 		// Com WordprocessingMLPackage é possível busar nodes com XPath, com XWPFDocument não.
 		WordprocessingMLPackage wordMLPackage = WordprocessingMLPackage.load(docxContratoTemplateFile);
 
@@ -72,6 +69,9 @@ public class PocWordtopdfApplication {
 
 					boolean debug = true;
 					if (debug) { // salvar em disco para verificar o resultado
+
+						String docxOutputPath = "/home/zanfranceschi/projects/itau/poc_wordtopdf/output/contrato2.docx";
+						String pdfOutputPath = "/home/zanfranceschi/projects/itau/poc_wordtopdf/output/contrato2.pdf";
 
 						wordMLPackage.save(new File(docxOutputPath)); // salva o docx em disco
 
