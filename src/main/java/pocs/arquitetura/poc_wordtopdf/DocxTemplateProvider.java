@@ -19,7 +19,7 @@ public class DocxTemplateProvider {
 
     private File docxTemplateFile;
     private LocalDateTime templateLoadedAt;
-    private int templateExpirationSeconds = 60; // 1 * 60 * 60; // 2 horas
+    private int templateExpirationSeconds = 60; // 2 * 60 * 60; // 2 horas
 
     public File getDocxTemplateFile() {
 
